@@ -1,0 +1,216 @@
+/* Installation — Literal vs Speculative Translation */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
+:root {
+  --bg: #050507;
+  --surface: #0c0c10;
+  --text: #e8e6e3;
+  --muted: #6b6b7a;
+  --accent: #e8a54b;
+  --focus: #f0c078;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  line-height: 1.7;
+}
+
+/* Phase 1: Literal */
+.literal-wrap {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 4rem 2rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.literal-wrap h1 {
+  font-size: 1.1rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-bottom: 3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.motif-block {
+  background: transparent;
+  border: none;
+  border-left: 1px solid rgba(255,255,255,0.1);
+  border-radius: 0;
+  padding: 0 0 0 2rem;
+  margin-bottom: 3rem;
+  transition: border-color 0.3s ease;
+}
+
+.motif-block:hover {
+  border-left-color: var(--accent);
+}
+
+.motif-block h3 {
+  font-size: 1.8rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--text);
+  margin: 0 0 0.5rem 0;
+  text-transform: none;
+}
+
+.motif-block h3 span {
+  font-size: 0.9rem;
+  font-weight: 400;
+  opacity: 0.4;
+  margin-left: 0.5rem;
+}
+
+.motif-block p {
+  margin: 0;
+  color: rgba(255,255,255,0.6);
+  font-size: 1.2rem;
+  font-style: italic;
+}
+
+.sam-section {
+  margin-top: 4rem;
+  padding-top: 3rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.sam-section h2 {
+  font-size: 1.4rem;
+  font-weight: 400;
+  margin-bottom: 0.5rem;
+}
+
+.sam-section p {
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin-bottom: 2rem;
+  font-style: italic;
+}
+
+.sam-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  max-width: 300px;
+  margin-bottom: 0.75rem;
+}
+
+.sam-cell {
+  aspect-ratio: 1;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(255,255,255,0.02);
+}
+
+.sam-cell:hover {
+  border-color: rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.06);
+  transform: scale(1.05);
+}
+
+.sam-cell.selected {
+  border-color: var(--accent);
+  background: rgba(232, 165, 75, 0.15);
+  box-shadow: 0 0 15px rgba(232, 165, 75, 0.2);
+}
+
+.sam-labels {
+  display: flex;
+  justify-content: space-between;
+  max-width: 300px;
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.cta-btn {
+  display: inline-block;
+  margin-top: 2rem;
+  padding: 1rem 2rem;
+  background: transparent;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 4px;
+  font-weight: 400;
+  font-size: 1.1rem;
+  border: 1px solid rgba(255,255,255,0.2);
+  transition: all 0.3s ease;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  letter-spacing: 0.03em;
+}
+
+.cta-btn:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.4);
+}
+
+/* Phase 2: Full-screen canvas */
+.speculative-wrap {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.speculative-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.instruction-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 2rem;
+  background: linear-gradient(transparent, rgba(0,0,0,0.9));
+  color: var(--text);
+  font-size: 1rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Dashboard */
+.dashboard-wrap {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 4rem 2rem;
+  min-height: 100vh;
+}
+
+.dashboard-wrap h1 {
+  font-size: 2rem;
+  font-weight: 400;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+.dashboard-wrap .subtitle {
+  color: var(--muted);
+  font-size: 1rem;
+  font-style: italic;
+  margin-bottom: 3rem;
+}
+
+#chart {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 1.5rem;
+  min-height: 400px;
+}

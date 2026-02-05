@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 1 — Literal Translation</title>
+  <link rel="stylesheet" href="css/installation.css">
+</head>
+<body>
+  <div class="literal-wrap">
+    <h1>Literal Translation</h1>
+    <p style="color: var(--muted); margin-bottom: 3rem; font-style: italic; font-size: 1.1rem;">Three words that have no direct English equivalent.<br>Read their dictionary definitions.</p>
+
+    <div class="motif-block">
+      <h3>Hygge <span>(Danish · HOO-gah)</span></h3>
+      <p>"A quality of coziness and comfortable togetherness."</p>
+    </div>
+    <div class="motif-block">
+      <h3>Komorebi <span>(Japanese · koh-moh-REH-bee)</span></h3>
+      <p>"Sunlight filtering through tree leaves."</p>
+    </div>
+    <div class="motif-block">
+      <h3>Fernweh <span>(German · FERN-vey)</span></h3>
+      <p>"An ache for distant places; the opposite of homesickness."</p>
+    </div>
+
+    <section class="sam-section">
+      <h2>How do you feel after reading?</h2>
+      <p>Click one cell: left = unpleasant, right = pleasant (valence). Bottom = calm, top = aroused.</p>
+      <div class="sam-grid" role="group" aria-label="SAM valence and arousal">
+        <!-- 5 rows (arousal 5→1), 5 cols (valence 1→5) -->
+        <div class="sam-cell" data-valence="1" data-arousal="5"></div>
+        <div class="sam-cell" data-valence="2" data-arousal="5"></div>
+        <div class="sam-cell" data-valence="3" data-arousal="5"></div>
+        <div class="sam-cell" data-valence="4" data-arousal="5"></div>
+        <div class="sam-cell" data-valence="5" data-arousal="5"></div>
+        <div class="sam-cell" data-valence="1" data-arousal="4"></div>
+        <div class="sam-cell" data-valence="2" data-arousal="4"></div>
+        <div class="sam-cell" data-valence="3" data-arousal="4"></div>
+        <div class="sam-cell" data-valence="4" data-arousal="4"></div>
+        <div class="sam-cell" data-valence="5" data-arousal="4"></div>
+        <div class="sam-cell" data-valence="1" data-arousal="3"></div>
+        <div class="sam-cell" data-valence="2" data-arousal="3"></div>
+        <div class="sam-cell" data-valence="3" data-arousal="3"></div>
+        <div class="sam-cell" data-valence="4" data-arousal="3"></div>
+        <div class="sam-cell" data-valence="5" data-arousal="3"></div>
+        <div class="sam-cell" data-valence="1" data-arousal="2"></div>
+        <div class="sam-cell" data-valence="2" data-arousal="2"></div>
+        <div class="sam-cell" data-valence="3" data-arousal="2"></div>
+        <div class="sam-cell" data-valence="4" data-arousal="2"></div>
+        <div class="sam-cell" data-valence="5" data-arousal="2"></div>
+        <div class="sam-cell" data-valence="1" data-arousal="1"></div>
+        <div class="sam-cell" data-valence="2" data-arousal="1"></div>
+        <div class="sam-cell" data-valence="3" data-arousal="1"></div>
+        <div class="sam-cell" data-valence="4" data-arousal="1"></div>
+        <div class="sam-cell" data-valence="5" data-arousal="1"></div>
+      </div>
+      <div class="sam-labels">
+        <span>Unpleasant</span>
+        <span>Pleasant</span>
+      </div>
+      <a href="speculative.html" class="cta-btn" id="continueBtn">Continue to speculative experience →</a>
+    </section>
+  </div>
+
+  <script src="js/sam.js"></script>
+  <script>
+    SAM.initGrid();
+    document.getElementById('continueBtn').addEventListener('click', function (e) {
+      if (!SAM.save('literal')) {
+        e.preventDefault();
+        alert('Please select one cell on the grid before continuing.');
+      }
+    });
+  </script>
+</body>
+</html>

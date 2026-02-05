@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 3 — Results</title>
+  <link rel="stylesheet" href="css/installation.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+    
+    body {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+    }
+    
+    .dashboard-wrap {
+      max-width: 52rem;
+      margin: 0 auto;
+      padding: 4rem 2rem;
+      min-height: 100vh;
+    }
+    
+    .dashboard-wrap h1 {
+      font-size: 2.5rem;
+      font-weight: 400;
+      color: rgba(255,255,255,0.95);
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.02em;
+    }
+    
+    .dashboard-wrap .subtitle {
+      color: rgba(255,255,255,0.4);
+      font-size: 1.1rem;
+      margin-bottom: 3rem;
+      font-style: italic;
+    }
+    
+    #chart-container {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 2.5rem;
+    }
+    
+    #chart {
+      width: 100%;
+      height: 420px;
+    }
+    
+    .summary-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .summary-card h3 {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.4);
+      margin: 0 0 1.25rem 0;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      font-weight: 400;
+    }
+    
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+    }
+    
+    .metric {
+      background: rgba(255,255,255,0.02);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    
+    .metric-label {
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.4);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.5rem;
+    }
+    
+    .metric-value {
+      font-size: 2.5rem;
+      font-weight: 500;
+    }
+    
+    .metric-value.positive {
+      color: #7ec8a3;
+    }
+    
+    .metric-value.negative {
+      color: #c87e7e;
+    }
+    
+    .metric-value.neutral {
+      color: rgba(255,255,255,0.6);
+    }
+    
+    .legend {
+      display: flex;
+      gap: 2.5rem;
+      justify-content: center;
+      margin-top: 1.5rem;
+    }
+    
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.95rem;
+      color: rgba(255,255,255,0.5);
+    }
+    
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+    }
+    
+    .legend-dot.literal {
+      background: #5a7fa8;
+    }
+    
+    .legend-dot.speculative {
+      background: #e8a54b;
+    }
+    
+    .interpretation {
+      font-size: 1.15rem;
+      line-height: 1.8;
+      color: rgba(255,255,255,0.7);
+    }
+    
+    .interpretation strong {
+      color: rgba(255,255,255,0.95);
+      font-weight: 500;
+    }
+    
+    .restart-btn {
+      display: inline-block;
+      margin-top: 2rem;
+      padding: 1rem 2rem;
+      background: transparent;
+      color: rgba(255,255,255,0.7);
+      border: 1px solid rgba(255,255,255,0.2);
+      text-decoration: none;
+      border-radius: 4px;
+      font-weight: 400;
+      font-size: 1rem;
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      transition: all 0.3s ease;
+      letter-spacing: 0.03em;
+    }
+    
+    .restart-btn:hover {
+      background: rgba(255,255,255,0.05);
+      border-color: rgba(255,255,255,0.4);
+    }
+    
+    .no-data {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: rgba(255,255,255,0.5);
+      font-size: 1.1rem;
+    }
+    
+    .no-data a {
+      color: #e8a54b;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(232, 165, 75, 0.3);
+      transition: border-color 0.2s;
+    }
+    
+    .no-data a:hover {
+      border-bottom-color: #e8a54b;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-wrap">
+    <h1>Measuring Meaning Preservation</h1>
+    <p class="subtitle">SAM emotional ratings: literal translation vs intersemiotic (embodied) translation</p>
+    
+    <div id="content">
+      <!-- Filled by JS -->
+    </div>
+  </div>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script>
+    const KEY = 'speculative_translation_sam';
+    const data = JSON.parse(localStorage.getItem(KEY) || '{}');
+    
+    const contentEl = document.getElementById('content');
+    
+    if (!data.literal || !data.speculative) {
+      contentEl.innerHTML = `
+        <div class="no-data">
+          <p>No complete data found. Please complete both phases first.</p>
+          <p><a href="literal.html">Start from Phase 1 →</a></p>
+        </div>
+      `;
+    } else {
+      const lit = data.literal;
+      const spec = data.speculative;
+      
+      const valenceChange = spec.valence - lit.valence;
+      const arousalChange = spec.arousal - lit.arousal;
+      
+      function formatChange(val) {
+        if (val > 0) return '+' + val;
+        return val.toString();
+      }
+      
+      function getChangeClass(val) {
+        if (val > 0) return 'positive';
+        if (val < 0) return 'negative';
+        return 'neutral';
+      }
+      
+      contentEl.innerHTML = `
+        <div id="chart-container">
+          <div id="chart"></div>
+          <div class="legend">
+            <div class="legend-item">
+              <div class="legend-dot literal"></div>
+              Literal Translation
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot speculative"></div>
+              Speculative Experience
+            </div>
+          </div>
+        </div>
+        
+        <div class="summary-card">
+          <h3>Emotional Shift</h3>
+          <div class="metrics">
+            <div class="metric">
+              <div class="metric-label">Pleasantness</div>
+              <div class="metric-value ${getChangeClass(valenceChange)}">${formatChange(valenceChange)}</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Engagement</div>
+              <div class="metric-value ${getChangeClass(arousalChange)}">${formatChange(arousalChange)}</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="summary-card">
+          <h3>Interpretation</h3>
+          <p class="interpretation">
+            ${generateInterpretation(valenceChange, arousalChange)}
+          </p>
+        </div>
+        
+        <a href="literal.html" class="restart-btn" onclick="localStorage.removeItem('${KEY}')">Experience Again</a>
+      `;
+      
+      // Draw chart with p5.js
+      new p5(function(p) {
+        p.setup = function() {
+          const container = document.getElementById('chart');
+          const canvas = p.createCanvas(container.offsetWidth, 420);
+          canvas.parent('chart');
+          p.noLoop();
+        };
+        
+        p.draw = function() {
+          p.background(8, 8, 12);
+          
+          const padding = 70;
+          const chartW = p.width - padding * 2;
+          const chartH = p.height - padding * 2;
+          
+          // Grid - subtle
+          p.stroke(255, 255, 255, 8);
+          p.strokeWeight(1);
+          for (let i = 0; i <= 4; i++) {
+            let x = padding + (i / 4) * chartW;
+            let y = padding + (i / 4) * chartH;
+            p.line(x, padding, x, padding + chartH);
+            p.line(padding, y, padding + chartW, y);
+          }
+          
+          // Axes - slightly more visible
+          p.stroke(255, 255, 255, 20);
+          p.strokeWeight(1);
+          p.line(padding, padding + chartH, padding + chartW, padding + chartH);
+          p.line(padding, padding, padding, padding + chartH);
+          
+          // Labels
+          p.noStroke();
+          p.fill(255, 255, 255, 100);
+          p.textSize(12);
+          p.textFont('Georgia');
+          p.textAlign(p.CENTER);
+          
+          // X axis labels
+          p.fill(255, 255, 255, 60);
+          p.text('Unpleasant', padding + 30, p.height - 20);
+          p.text('Pleasant', padding + chartW - 30, p.height - 20);
+          
+          // Y axis labels
+          p.push();
+          p.translate(20, padding + chartH - 30);
+          p.rotate(-p.PI / 2);
+          p.text('Calm', 0, 0);
+          p.pop();
+          
+          p.push();
+          p.translate(20, padding + 30);
+          p.rotate(-p.PI / 2);
+          p.text('Engaged', 0, 0);
+          p.pop();
+          
+          // Map values (1-5) to chart coords
+          function mapX(val) {
+            return padding + ((val - 1) / 4) * chartW;
+          }
+          function mapY(val) {
+            return padding + chartH - ((val - 1) / 4) * chartH;
+          }
+          
+          const litX = mapX(lit.valence);
+          const litY = mapY(lit.arousal);
+          const specX = mapX(spec.valence);
+          const specY = mapY(spec.arousal);
+          
+          // Connection line with gradient effect
+          if (litX !== specX || litY !== specY) {
+            // Dotted path
+            p.stroke(255, 255, 255, 25);
+            p.strokeWeight(2);
+            p.drawingContext.setLineDash([5, 8]);
+            p.line(litX, litY, specX, specY);
+            p.drawingContext.setLineDash([]);
+            
+            // Arrow head
+            const angle = p.atan2(specY - litY, specX - litX);
+            const arrowLen = 12;
+            p.stroke(232, 165, 75, 150);
+            p.strokeWeight(2);
+            p.push();
+            p.translate(specX, specY);
+            p.rotate(angle);
+            p.line(-arrowLen * 1.5, 0, -arrowLen, -arrowLen / 2);
+            p.line(-arrowLen * 1.5, 0, -arrowLen, arrowLen / 2);
+            p.pop();
+          }
+          
+          // Literal point (blue) - with glow
+          p.noStroke();
+          for (let r = 60; r > 0; r -= 10) {
+            p.fill(90, 127, 168, p.map(r, 0, 60, 80, 5));
+            p.ellipse(litX, litY, r, r);
+          }
+          p.fill(90, 127, 168);
+          p.ellipse(litX, litY, 16, 16);
+          
+          // Speculative point (amber) - with glow
+          for (let r = 70; r > 0; r -= 10) {
+            p.fill(232, 165, 75, p.map(r, 0, 70, 80, 5));
+            p.ellipse(specX, specY, r, r);
+          }
+          p.fill(232, 165, 75);
+          p.ellipse(specX, specY, 18, 18);
+          
+          // Labels on points
+          p.fill(255, 255, 255, 180);
+          p.textSize(11);
+          p.textAlign(p.LEFT);
+          p.text('Before', litX + 20, litY + 4);
+          p.fill(232, 165, 75, 230);
+          p.text('After', specX + 22, specY + 4);
+        };
+        
+        p.windowResized = function() {
+          const container = document.getElementById('chart');
+          p.resizeCanvas(container.offsetWidth, 420);
+          p.redraw();
+        };
+      });
+    }
+    
+    function generateInterpretation(vChange, aChange) {
+      let parts = [];
+      
+      // Opening - framed in thesis language
+      if (vChange > 0 && aChange > 0) {
+        parts.push("The embodied, gesture-based experience produced <strong>measurably stronger emotional engagement</strong> than the dictionary definitions — supporting the hypothesis that intersemiotic translation preserves meaning that literal translation loses.");
+      } else if (vChange > 0 || aChange > 0) {
+        parts.push("The speculative translation <strong>enhanced emotional resonance</strong> in at least one dimension, suggesting that embodied meaning-making can recover what Venuti calls the 'cultural and emotional nuances erased during linguistic transfer.'");
+      } else if (vChange === 0 && aChange === 0) {
+        parts.push("Your emotional response remained <strong>consistent</strong> across translation modes — an interesting finding that warrants further investigation into individual differences in embodied cognition.");
+      } else {
+        parts.push("The literal definitions evoked a <strong>different emotional quality</strong> — perhaps the abstraction of text allowed for personal interpretation that the embodied experience made more specific.");
+      }
+      
+      // Valence detail - connected to metaphor theory
+      if (vChange > 1) {
+        parts.push("The gesture-based rooms felt <strong>significantly more pleasant</strong>. Following Lakoff and Johnson's cognitive metaphor theory, your body's engagement with abstract concepts (warmth, light, distance) may have activated deeper emotional schemas than text alone.");
+      } else if (vChange > 0) {
+        parts.push("The embodied experience felt <strong>somewhat more pleasant</strong> — the sensory engagement may have created what the Emotive project calls 'emotional connections that disappear in text-based interpretation.'");
+      } else if (vChange < -1) {
+        parts.push("The immersive experience surfaced <strong>more complex emotions</strong>. This aligns with the finding that speculative translation can access 'bittersweet awareness' (mono no aware) that literal definitions flatten.");
+      }
+      
+      // Arousal detail - connected to embodiment
+      if (aChange > 1) {
+        parts.push("Your engagement level <strong>increased substantially</strong>. As Dao's 'Unfolding the Self' demonstrates, translating meaning through gesture and physical interaction creates presence and emotional intensity that language cannot replicate.");
+      } else if (aChange > 0) {
+        parts.push("You felt <strong>more emotionally engaged</strong> during the gesture-based experience — supporting Jakobson's concept that intersemiotic translation (text to embodied sensation) can reconstruct meaning across modalities.");
+      } else if (aChange < 0) {
+        parts.push("The experience evoked a <strong>calmer state</strong>. This meditative quality may reflect what participants in the interview study described as 'feeling the word rather than thinking it.'");
+      }
+      
+      // Conclusion - thesis statement
+      if (vChange > 0 || aChange > 0) {
+        parts.push("<br><br><strong>Implication:</strong> This data point supports the thesis that speculative storytelling, when treated as intersemiotic translation, can preserve emotional tone and metaphorical depth more effectively than literal translation — demonstrating that meaning is not merely linguistic but embodied, relational, and culturally situated.");
+      }
+      
+      return parts.join(' ');
+    }
+  </script>
+</body>
+</html>
