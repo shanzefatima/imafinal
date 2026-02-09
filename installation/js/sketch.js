@@ -34,11 +34,31 @@ let handVelocity = 0;
 // MediaPipe
 let videoElement, mpHands, camera;
 
+// === AUDIO SYSTEM ===
+let audioStarted = false;
+let audioContext = null;
+
+// Hygge Audio: Wind (cold) + Warmth (fire crackle)
+let hyggeWind, hyggeWindFilter, hyggeWarmth_audio, hyggeWarmthFilter;
+let hyggeCrackle, hyggeHum;
+
+// Komorebi Audio: Crystalline chimes
+let komorebiChime, komorebiReverb, komorebiDelay;
+let komorebiDrone;
+
+// Fernweh Audio: Shepard tone / infinite rise
+let fernwehDrone, fernwehLFO, fernwehFilter;
+let fernwehWhistle;
+
+// Audio initialization flag
+let audioInitialized = false;
+
 // === CHAPTER DATA ===
 const CHAPTERS = [
   {
     number: 1,
     word: "HYGGE",
+    native: "hygge",  // Danish uses Latin script
     pronunciation: "HOO-gah",
     origin: "Danish",
     meaning: "The warmth of being together",
@@ -49,16 +69,18 @@ const CHAPTERS = [
   {
     number: 2,
     word: "KOMOREBI",
+    native: "木漏れ日",  // Japanese kanji/hiragana
     pronunciation: "koh-moh-REH-bee",
     origin: "Japanese",
     meaning: "Sunlight filtering through leaves",
-    instruction: "Raise your hand high for 5 seconds",
+    instruction: "Spread your fingers open to let light through",
     narrative: "You step outside. Light filters through the canopy above.",
     color: { h: 45, s: 65, b: 80 }  // Soft golden light
   },
   {
     number: 3,
     word: "FERNWEH",
+    native: "Fernweh",  // German uses Latin script
     pronunciation: "FERN-vey",
     origin: "German",
     meaning: "An ache for distant places",
@@ -84,11 +106,13 @@ let komorebiHandY = 0.5;
 let fernwehSpeed = 0;
 let fernwehStars = [];
 let fernwehDistance = 0;
+let fernwehMist = [];
+let fernwehMemories = [];
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   colorMode(HSB, 360, 100, 100, 100);
-  textFont('Georgia');
+  textFont('Cormorant Garamond, Noto Sans JP, Georgia, serif');
   
   hyggeCenterX = width / 2;
   hyggeCenterY = height / 2;
@@ -99,6 +123,424 @@ function setup() {
   // Start with title
   phase = 'title';
   phaseTimer = millis();
+}
+
+// === AUDIO INITIALIZATION ===
+async function initAudio() {
+  if (audioInitialized) return;
+  
+  try {
+    await Tone.start();
+    console.log("Audio context started");
+    
+    // === HYGGE AUDIO ===
+    // Cold wind (filtered noise)
+    hyggeWind = new Tone.Noise("brown").start();
+    hyggeWindFilter = new Tone.Filter(800, "lowpass");
+    const windGain = new Tone.Gain(0.15);
+    hyggeWind.connect(hyggeWindFilter);
+    hyggeWindFilter.connect(windGain);
+    windGain.toDestination();
+    
+    // Warm fire crackle/hum
+    hyggeHum = new Tone.FMSynth({
+      harmonicity: 1,
+      modulationIndex: 2,
+      oscillator: { type: "sine" },
+      envelope: { attack: 2, decay: 1, sustain: 0.8, release: 2 },
+      modulation: { type: "triangle" },
+      modulationEnvelope: { attack: 0.5, decay: 0.5, sustain: 1, release: 0.5 }
+    });
+    hyggeWarmthFilter = new Tone.Filter(200, "lowpass");
+    const warmGain = new Tone.Gain(0);
+    hyggeHum.connect(hyggeWarmthFilter);
+    hyggeWarmthFilter.connect(warmGain);
+    warmGain.toDestination();
+    hyggeHum.triggerAttack("C2");
+    hyggeHum.warmGain = warmGain; // Store reference
+    
+    // === KOMOREBI AUDIO ===
+    // Crystalline shimmer synth
+    komorebiReverb = new Tone.Reverb({ decay: 4, wet: 0.6 }).toDestination();
+    komorebiDelay = new Tone.FeedbackDelay("8n", 0.4).connect(komorebiReverb);
+    komorebiChime = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: "sine" },
+      envelope: { attack: 0.02, decay: 1.5, sustain: 0, release: 1.5 }
+    });
+    komorebiChime.connect(komorebiDelay);
+    komorebiChime.volume.value = -12;
+    
+    // Soft pad drone
+    komorebiDrone = new Tone.Synth({
+      oscillator: { type: "triangle" },
+      envelope: { attack: 3, decay: 1, sustain: 0.6, release: 3 }
+    });
+    const droneFilter = new Tone.Filter(400, "lowpass");
+    const droneGain = new Tone.Gain(0);
+    komorebiDrone.connect(droneFilter);
+    droneFilter.connect(droneGain);
+    droneGain.connect(komorebiReverb);
+    komorebiDrone.droneGain = droneGain;
+    
+    // === FERNWEH AUDIO ===
+    // Infinite rising Shepard tone effect
+    fernwehDrone = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: "sine" },
+      envelope: { attack: 2, decay: 0.5, sustain: 0.8, release: 2 }
+    });
+    fernwehFilter = new Tone.Filter(300, "lowpass");
+    const fernwehReverb = new Tone.Reverb({ decay: 6, wet: 0.7 }).toDestination();
+    const fernwehGain = new Tone.Gain(0);
+    fernwehDrone.connect(fernwehFilter);
+    fernwehFilter.connect(fernwehGain);
+    fernwehGain.connect(fernwehReverb);
+    fernwehDrone.fernwehGain = fernwehGain;
+    
+    // Distant whistle/wind
+    fernwehWhistle = new Tone.Noise("pink").start();
+    const whistleFilter = new Tone.Filter(1200, "bandpass", -24);
+    const whistleGain = new Tone.Gain(0);
+    fernwehWhistle.connect(whistleFilter);
+    whistleFilter.connect(whistleGain);
+    whistleGain.connect(fernwehReverb);
+    fernwehWhistle.whistleGain = whistleGain;
+    fernwehWhistle.whistleFilter = whistleFilter;
+    
+    audioInitialized = true;
+    console.log("Audio system initialized");
+    
+  } catch (e) {
+    console.error("Audio init failed:", e);
+  }
+}
+
+// Start audio on first user interaction
+function mousePressed() {
+  if (!audioInitialized) {
+    initAudio();
+  }
+}
+
+function touchStarted() {
+  if (!audioInitialized) {
+    initAudio();
+  }
+  return false;
+}
+
+// === AUDIO UPDATE FUNCTIONS ===
+
+function updateHyggeAudio(warmth) {
+  if (!audioInitialized) return;
+  
+  // HYGGE: Contrast of cold outside vs warm inside
+  // Wind fades dramatically as warmth increases
+  const windFreq = map(warmth, 0, 1, 600, 80);
+  const windVol = map(warmth, 0, 1, 0.12, 0);
+  hyggeWindFilter.frequency.rampTo(windFreq, 0.5);
+  
+  // Fire crackle warmth - only audible when hands are together
+  const warmVol = warmth > 0.4 ? map(warmth, 0.4, 1, 0, 0.15) : 0;
+  const warmFreq = map(warmth, 0, 1, 120, 350);
+  hyggeHum.warmGain.gain.rampTo(warmVol, 0.4);
+  hyggeWarmthFilter.frequency.rampTo(warmFreq, 0.4);
+  
+  // Occasional crackle sounds when warm
+  if (warmth > 0.5 && random() < 0.008) {
+    // Random crackle pitch
+    hyggeHum.modulationIndex.rampTo(random(3, 8), 0.1);
+    setTimeout(() => hyggeHum.modulationIndex.rampTo(2, 0.3), 100);
+  }
+}
+
+function updateKomorebiAudio(lightLevel, handY) {
+  if (!audioInitialized) return;
+  
+  // KOMOREBI: Delicate, fleeting - like Japanese wind chimes (furin)
+  // Only plays when light is actively filtering through
+  
+  // Chimes triggered by light changes - more musical, less random
+  if (lightLevel > 0.35 && random() < 0.015 * lightLevel) {
+    // Pentatonic scale for Japanese feel
+    const notes = ['D5', 'E5', 'G5', 'A5', 'B5', 'D6'];
+    const note = notes[floor(random(notes.length))];
+    const vel = map(lightLevel, 0.35, 1, 0.15, 0.5);
+    komorebiChime.triggerAttackRelease(note, "4n", undefined, vel);
+  }
+  
+  // Soft forest ambience - very subtle, not continuous
+  if (lightLevel > 0.3 && !komorebiDrone._playing) {
+    komorebiDrone.triggerAttack("D4");
+    komorebiDrone._playing = true;
+  } else if (lightLevel <= 0.2 && komorebiDrone._playing) {
+    komorebiDrone.triggerRelease();
+    komorebiDrone._playing = false;
+  }
+  
+  if (komorebiDrone.droneGain) {
+    // Very subtle pad, mostly silence
+    const droneVol = lightLevel > 0.4 ? map(lightLevel, 0.4, 1, 0, 0.05) : 0;
+    komorebiDrone.droneGain.gain.rampTo(droneVol, 0.8);
+  }
+  
+  // Reverb - more when in shadow (muffled forest)
+  if (komorebiReverb) {
+    const reverbWet = map(lightLevel, 0, 1, 0.7, 0.3);
+    komorebiReverb.wet.rampTo(reverbWet, 0.5);
+  }
+}
+
+function updateFernwehAudio(reachIntensity) {
+  if (!audioInitialized) return;
+  
+  // FERNWEH: The ache for somewhere you've never been
+  // A low, melancholic minor chord that swells but never resolves
+  // Like hearing a distant train at night — it stirs something deep
+  
+  // Start the drone with a minor 7th — inherently unresolved and yearning
+  if (reachIntensity > 0.1 && !fernwehDrone._playing) {
+    fernwehDrone.triggerAttack(["D2", "A2", "F3", "C4"]); // Dm7 — melancholic, unresolved
+    fernwehDrone._playing = true;
+  } else if (reachIntensity <= 0.05 && fernwehDrone._playing) {
+    fernwehDrone.triggerRelease();
+    fernwehDrone._playing = false;
+  }
+  
+  // The ache grows as you reach — it never becomes comfortable
+  if (fernwehDrone.fernwehGain) {
+    const vol = reachIntensity > 0.1 ? map(reachIntensity, 0.1, 1, 0.03, 0.16) : 0;
+    fernwehDrone.fernwehGain.gain.rampTo(vol, 0.8);
+  }
+  
+  // Filter opens slowly — like a memory coming into focus
+  const filterFreq = map(reachIntensity, 0, 1, 120, 700);
+  fernwehFilter.frequency.rampTo(filterFreq, 0.6);
+  
+  // Distant whistle — a train, a wind, the call of faraway
+  if (fernwehWhistle.whistleGain) {
+    // Faint and mournful — only when reaching significantly
+    const whistleVol = reachIntensity > 0.3 ? map(reachIntensity, 0.3, 1, 0, 0.035) : 0;
+    fernwehWhistle.whistleGain.gain.rampTo(whistleVol, 1.0);
+    
+    // Wavering pitch — like something calling from far away
+    const baseFreq = 900;
+    const waver = sin(millis() * 0.001) * 200; // Gentle wavering
+    fernwehWhistle.whistleFilter.frequency.rampTo(baseFreq + waver * reachIntensity, 0.3);
+  }
+  
+  // Occasional single melancholic note — like a distant bell
+  if (reachIntensity > 0.5 && random() < 0.003) {
+    const notes = ['D4', 'F4', 'A4']; // Minor triad fragments
+    komorebiChime.triggerAttackRelease(notes[floor(random(3))], "1n", undefined, 0.15);
+  }
+}
+
+function stopAllAudio() {
+  if (!audioInitialized) return;
+  
+  // Fade out everything gracefully
+  if (hyggeHum && hyggeHum.warmGain) hyggeHum.warmGain.gain.rampTo(0, 1.5);
+  if (hyggeWindFilter) hyggeWindFilter.frequency.rampTo(100, 1);
+  if (komorebiDrone && komorebiDrone.droneGain) {
+    komorebiDrone.droneGain.gain.rampTo(0, 1.5);
+    komorebiDrone._playing = false;
+  }
+  if (fernwehDrone && fernwehDrone.fernwehGain) {
+    fernwehDrone.fernwehGain.gain.rampTo(0, 1.5);
+    fernwehDrone._playing = false;
+  }
+  if (fernwehWhistle && fernwehWhistle.whistleGain) {
+    fernwehWhistle.whistleGain.gain.rampTo(0, 1.5);
+  }
+}
+
+function updateTransitionAudio(fromChapter, progress) {
+  if (!audioInitialized) return;
+  
+  // Transition audio tells the story of leaving one place, entering another
+  
+  if (fromChapter === 0) {
+    // Hygge → Komorebi: Fire dying, door opening, nature awakening
+    
+    // Fire/warmth fades out
+    if (hyggeHum && hyggeHum.warmGain) {
+      let warmth = map(progress, 0, 0.4, 0.1, 0, true);
+      hyggeHum.warmGain.gain.rampTo(warmth, 0.3);
+    }
+    
+    // Wind returns briefly (going outside)
+    if (hyggeWindFilter) {
+      let windFreq = map(progress, 0.2, 0.5, 100, 500, true);
+      hyggeWindFilter.frequency.rampTo(windFreq, 0.5);
+    }
+    
+    // Then nature sounds begin (birds/chimes)
+    if (progress > 0.5 && progress < 0.7 && random() < 0.03) {
+      const notes = ['E5', 'G5', 'A5'];
+      komorebiChime.triggerAttackRelease(notes[floor(random(3))], "8n", undefined, 0.2);
+    }
+    
+    // Forest drone fades in
+    if (komorebiDrone && komorebiDrone.droneGain && progress > 0.6) {
+      let vol = map(progress, 0.6, 1, 0, 0.04, true);
+      komorebiDrone.droneGain.gain.rampTo(vol, 0.5);
+      if (!komorebiDrone._playing && progress > 0.7) {
+        komorebiDrone.triggerAttack("D4");
+        komorebiDrone._playing = true;
+      }
+    }
+  }
+  else if (fromChapter === 1) {
+    // Komorebi → Fernweh: Light fading, longing awakening
+    
+    // Forest sounds fade
+    if (komorebiDrone && komorebiDrone.droneGain) {
+      let vol = map(progress, 0, 0.4, 0.04, 0, true);
+      komorebiDrone.droneGain.gain.rampTo(vol, 0.5);
+    }
+    
+    // Single melancholic chime
+    if (progress > 0.3 && progress < 0.35 && random() < 0.1) {
+      komorebiChime.triggerAttackRelease("A4", "2n", undefined, 0.3);
+    }
+    
+    // Fernweh drone slowly awakens
+    if (fernwehDrone && fernwehDrone.fernwehGain && progress > 0.5) {
+      let vol = map(progress, 0.5, 1, 0, 0.08, true);
+      fernwehDrone.fernwehGain.gain.rampTo(vol, 0.8);
+      if (!fernwehDrone._playing && progress > 0.6) {
+        fernwehDrone.triggerAttack(["A1", "E2", "A2"]);
+        fernwehDrone._playing = true;
+      }
+      // Filter slowly opens
+      let freq = map(progress, 0.5, 1, 100, 400, true);
+      fernwehFilter.frequency.rampTo(freq, 0.5);
+    }
+    
+    // Distant whistle hints at the call of faraway
+    if (fernwehWhistle && fernwehWhistle.whistleGain && progress > 0.8) {
+      let vol = map(progress, 0.8, 1, 0, 0.02, true);
+      fernwehWhistle.whistleGain.gain.rampTo(vol, 0.5);
+    }
+  }
+}
+
+function updateCompleteAudio(elapsed) {
+  if (!audioInitialized) return;
+  
+  // Final resolution - all three cultures harmonize
+  let progress = min(elapsed / 5000, 1);
+  
+  // Gentle chord that combines all three moods
+  if (elapsed < 500 && !fernwehDrone._completePlayed) {
+    // Final resolving chord
+    fernwehDrone.triggerAttack(["A2", "D3", "F#3", "A3"]);
+    fernwehDrone._completePlayed = true;
+  }
+  
+  if (fernwehDrone && fernwehDrone.fernwehGain) {
+    // Slowly fade to silence
+    let vol = map(progress, 0, 0.8, 0.1, 0.02, true);
+    fernwehDrone.fernwehGain.gain.rampTo(vol, 1);
+  }
+  
+  // Final chimes - resolution
+  if (progress > 0.2 && progress < 0.5 && random() < 0.01) {
+    const notes = ['A4', 'D5', 'F#5'];
+    komorebiChime.triggerAttackRelease(notes[floor(random(3))], "2n", undefined, 0.2);
+  }
+  
+  fernwehFilter.frequency.rampTo(300, 2);
+}
+
+function updateReflectionAudio(chapterIndex, elapsed) {
+  if (!audioInitialized) return;
+  
+  // Gentle, resolving audio after completing a chapter
+  let progress = min(elapsed / 2500, 1);
+  
+  if (chapterIndex === 0) {
+    // After Hygge: Warmth lingers, then slowly fades
+    if (hyggeHum && hyggeHum.warmGain) {
+      let warmth = map(progress, 0, 1, 0.08, 0.02, true);
+      hyggeHum.warmGain.gain.rampTo(warmth, 0.5);
+    }
+    // Wind stays quiet
+    hyggeWindFilter.frequency.rampTo(100, 1);
+  }
+  else if (chapterIndex === 1) {
+    // After Komorebi: A final chime, then silence
+    if (progress < 0.2 && random() < 0.02) {
+      komorebiChime.triggerAttackRelease("D5", "2n", undefined, 0.25);
+    }
+    if (komorebiDrone && komorebiDrone.droneGain) {
+      let vol = map(progress, 0, 0.8, 0.03, 0, true);
+      komorebiDrone.droneGain.gain.rampTo(vol, 0.5);
+    }
+  }
+  else if (chapterIndex === 2) {
+    // After Fernweh: The longing settles into quiet acceptance
+    if (fernwehDrone && fernwehDrone.fernwehGain) {
+      let vol = map(progress, 0, 1, 0.1, 0.03, true);
+      fernwehDrone.fernwehGain.gain.rampTo(vol, 0.8);
+    }
+    fernwehFilter.frequency.rampTo(150, 1);
+  }
+}
+
+function updateTitleAudio(chapterIndex, elapsed) {
+  if (!audioInitialized) return;
+  
+  // Ambient mood-setting audio during title display
+  let progress = min(elapsed / 3000, 1); // 3 second buildup
+  
+  if (chapterIndex === 0) {
+    // Hygge title: Cold wind, anticipating warmth
+    let windVol = map(progress, 0, 0.5, 0.08, 0.12, true);
+    // Wind stays present, setting the "cold outside" mood
+    hyggeWindFilter.frequency.rampTo(500, 0.5);
+  }
+  else if (chapterIndex === 1) {
+    // Komorebi title: Soft forest ambience, birdsong hints
+    if (progress > 0.3 && random() < 0.008) {
+      // Occasional soft chime like distant birds
+      const notes = ['G5', 'A5', 'D6'];
+      komorebiChime.triggerAttackRelease(notes[floor(random(3))], "4n", undefined, 0.15);
+    }
+  }
+  else if (chapterIndex === 2) {
+    // Fernweh title: Deep, anticipatory drone
+    if (fernwehDrone && !fernwehDrone._playing && progress > 0.2) {
+      fernwehDrone.triggerAttack(["A1", "E2"]);
+      fernwehDrone._playing = true;
+    }
+    if (fernwehDrone && fernwehDrone.fernwehGain) {
+      let vol = map(progress, 0.2, 1, 0, 0.06, true);
+      fernwehDrone.fernwehGain.gain.rampTo(vol, 0.8);
+    }
+    fernwehFilter.frequency.rampTo(200, 1);
+  }
+}
+
+function setChapterAudio(chapterIndex) {
+  if (!audioInitialized) return;
+  
+  // Reset all audio for clean chapter start
+  stopAllAudio();
+  
+  // Setup audio state for new chapter
+  if (chapterIndex === 0) {
+    // Hygge: Wind present, warmth will come with gesture
+    hyggeWindFilter.frequency.rampTo(600, 0.5);
+  }
+  else if (chapterIndex === 1) {
+    // Komorebi: Quiet forest, sounds respond to light
+    if (komorebiDrone) komorebiDrone._playing = false;
+  }
+  else if (chapterIndex === 2) {
+    // Fernweh: Drone will build with reaching
+    if (fernwehDrone) fernwehDrone._playing = false;
+  }
 }
 
 function initAllChapters() {
@@ -125,26 +567,53 @@ function initAllChapters() {
     });
   }
   
-  // Komorebi leaves
+  // Komorebi leaves - fewer but larger for visual impact
   komorebiLeaves = [];
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 25; i++) {
     komorebiLeaves.push({
-      x: random(width), y: random(-50, height),
-      size: random(15, 35),
+      x: random(width), y: random(-100, height),
+      size: random(45, 95),  // Much bigger leaves
       rotation: random(TWO_PI),
-      fallSpeed: random(0.3, 0.8)
+      fallSpeed: random(0.4, 1.0)
     });
   }
   
   // Fernweh stars
   fernwehStars = [];
-  for (let i = 0; i < 500; i++) {
+  for (let i = 0; i < 400; i++) {
     fernwehStars.push({
       x: random(-width, width * 2),
-      y: random(-height, height * 2),
+      y: random(-height, height * 0.6),
       z: random(1, 15),
       size: random(1, 4),
-      brightness: random(40, 100)
+      brightness: random(40, 100),
+      twinkle: random(TWO_PI)
+    });
+  }
+  
+  // Fernweh mist layers (the haze of distance/longing)
+  fernwehMist = [];
+  for (let i = 0; i < 8; i++) {
+    fernwehMist.push({
+      x: random(width),
+      y: random(height * 0.35, height * 0.65),
+      w: random(300, 600),
+      h: random(50, 120),
+      speed: random(0.1, 0.4),
+      alpha: random(20, 50)
+    });
+  }
+  
+  // Fernweh memories - ghostly shapes that appear in the distance
+  fernwehMemories = [];
+  const memoryTypes = ['spire', 'dome', 'tower', 'arch', 'tree'];
+  for (let i = 0; i < 6; i++) {
+    fernwehMemories.push({
+      x: random(width * 0.1, width * 0.9),
+      type: memoryTypes[floor(random(memoryTypes.length))],
+      size: random(30, 70),
+      phase: random(TWO_PI),
+      speed: random(0.002, 0.005)
     });
   }
   
@@ -257,6 +726,9 @@ function drawTitle() {
   // Ambient particles
   drawTravelingParticles(0.3);
   
+  // Title audio - set the mood
+  updateTitleAudio(currentChapter, elapsed);
+  
   textAlign(CENTER, CENTER);
   noStroke();
   
@@ -264,19 +736,25 @@ function drawTitle() {
   let numAlpha = map(elapsed, 0, 500, 0, 50, true);
   fill(0, 0, 100, numAlpha);
   textSize(18);
-  text(`CHAPTER ${chapter.number} OF 3`, width/2, height * 0.25);
+  text(`CHAPTER ${chapter.number} OF 3`, width/2, height * 0.22);
   
-  // Word
+  // Word (romanized)
   let wordAlpha = map(elapsed, 300, 1000, 0, 100, true);
   fill(chapter.color.h, chapter.color.s * 0.5, 90, wordAlpha);
-  textSize(min(width * 0.18, 150));
-  text(chapter.word, width/2, height * 0.4);
+  textSize(min(width * 0.15, 120));
+  text(chapter.word, width/2, height * 0.36);
+  
+  // Native script (below romanized word)
+  let nativeAlpha = map(elapsed, 500, 1100, 0, 70, true);
+  fill(chapter.color.h, chapter.color.s * 0.3, 80, nativeAlpha);
+  textSize(min(width * 0.06, 50));
+  text(chapter.native, width/2, height * 0.36 + 70);
   
   // Pronunciation + origin
-  let subAlpha = map(elapsed, 600, 1200, 0, 60, true);
-  fill(0, 0, 70, subAlpha);
-  textSize(20);
-  text(`${chapter.pronunciation}  ·  ${chapter.origin}`, width/2, height * 0.4 + 80);
+  let subAlpha = map(elapsed, 700, 1300, 0, 55, true);
+  fill(0, 0, 65, subAlpha);
+  textSize(18);
+  text(`${chapter.pronunciation}  ·  ${chapter.origin}`, width/2, height * 0.36 + 115);
   
   // Meaning
   let meaningAlpha = map(elapsed, 900, 1500, 0, 90, true);
@@ -293,10 +771,10 @@ function drawTitle() {
   text(chapter.narrative, width/2, height * 0.70);
   
   // Instruction
-  let instrAlpha = map(elapsed, 1500, 2100, 0, 60, true);
-  fill(chapter.color.h, 40, 80, instrAlpha);
-  textSize(16);
-  text(chapter.instruction, width/2, height * 0.80);
+  let instrAlpha = map(elapsed, 1800, 2400, 0, 65, true);
+  fill(chapter.color.h, 40, 85, instrAlpha);
+  textSize(20);
+  text(chapter.instruction, width/2, height * 0.82);
   
   // Begin prompt
   if (elapsed > 2500) {
@@ -348,6 +826,7 @@ function drawExperience() {
       chapterComplete = true;
       phase = 'reflection';
       phaseTimer = millis();
+      stopAllAudio(); // Fade out chapter audio
     }
   } else {
     // Not doing gesture - show hint
@@ -399,6 +878,9 @@ function drawHygge() {
   hyggeCenterY = lerp(hyggeCenterY, targetY, 0.05);
   hyggeGlow = lerp(hyggeGlow, hyggeWarmth * 400, 0.03);
   
+  // Update audio - wind fades, warmth grows
+  updateHyggeAudio(hyggeWarmth);
+  
   // Central glow (hearth)
   noStroke();
   for (let r = hyggeGlow; r > 0; r -= 15) {
@@ -448,20 +930,22 @@ function drawHygge() {
 
 // === KOMOREBI ===
 function drawKomorebi() {
-  // Deep forest green with soft warmth
+  // Deep forest green
   background(135, 45, 8);
   
-  // Interaction: hand height controls light
-  let targetLight = 0.2;
+  // Interaction: spread fingers to let light through (like leaves parting)
+  let targetLight = 0.15;
   let doingGesture = false;
   
   if (hands.length > 0) {
     komorebiHandY = lerp(komorebiHandY, hands[0].y / height, 0.08);
-    targetLight = map(komorebiHandY, 0.8, 0.15, 0, 1, true);
     
-    // GESTURE: hand raised high (upper third of screen)
-    if (hands[0].y < height * 0.4) {
+    // Light responds to open hand (fingers spread = light filtering through)
+    if (hands[0].open) {
+      targetLight = map(hands[0].y, height, 0, 0.4, 1, true);
       doingGesture = true;
+    } else {
+      targetLight = 0.2;
     }
   }
   
@@ -470,7 +954,7 @@ function drawKomorebi() {
     if (!gestureActive) {
       gestureActive = true;
       gestureStartTime = millis();
-      console.log("KOMOREBI: Gesture started - hand raised high");
+      console.log("KOMOREBI: Gesture started - fingers spread like light through leaves");
     }
   } else {
     if (gestureActive) {
@@ -481,69 +965,124 @@ function drawKomorebi() {
   
   komorebiLight = lerp(komorebiLight, targetLight, 0.04);
   
-  // Light rays
+  // Update audio
+  updateKomorebiAudio(komorebiLight, komorebiHandY);
+  
+  // Draw canopy silhouette at top first (darker layer)
   noStroke();
+  fill(130, 55, 4);
+  for (let i = 0; i < 25; i++) {
+    let x = i * width/15 - 80;
+    let size = 200 + sin(i * 0.5) * 60;
+    ellipse(x, -30, size, size * 0.8);
+  }
+  
+  // Light rays filtering through gaps
   for (let ray of komorebiRays) {
     let brightness = ray.brightness * komorebiLight;
-    let sway = sin(frameCount * 0.01 + ray.phase) * 20;
+    let sway = sin(frameCount * 0.008 + ray.phase) * 30;
     
     push();
-    translate(ray.x + sway, -30);
+    translate(ray.x + sway, 0);
     
-    for (let i = 3; i >= 0; i--) {
-      let w = ray.width * (1 + i * 0.4);
-      let alpha = brightness * 0.15 / (i + 1);
+    // Multiple soft layers for god-ray effect
+    for (let i = 4; i >= 0; i--) {
+      let w = ray.width * (1 + i * 0.5);
+      let alpha = brightness * 0.12 / (i + 1);
       
-      let grad = drawingContext.createLinearGradient(0, 0, 0, height * 1.2);
-      // Soft warm golden light rays
-      grad.addColorStop(0, `hsla(42, 65%, ${90 * komorebiLight}%, ${alpha})`);
-      grad.addColorStop(1, `hsla(38, 55%, ${65 * komorebiLight}%, 0)`);
+      let grad = drawingContext.createLinearGradient(0, 0, 0, height);
+      grad.addColorStop(0, `hsla(45, 70%, ${95 * komorebiLight}%, ${alpha})`);
+      grad.addColorStop(0.3, `hsla(42, 60%, ${85 * komorebiLight}%, ${alpha * 0.8})`);
+      grad.addColorStop(1, `hsla(40, 50%, ${60 * komorebiLight}%, 0)`);
       drawingContext.fillStyle = grad;
       
       beginShape();
-      vertex(-w * 0.1, 0);
-      vertex(w * 0.1, 0);
-      vertex(w, height * 1.2);
-      vertex(-w, height * 1.2);
+      vertex(-w * 0.05, 0);
+      vertex(w * 0.05, 0);
+      vertex(w * 0.8, height);
+      vertex(-w * 0.8, height);
       endShape(CLOSE);
     }
     pop();
   }
   
-  // Light pool at hand position
-  if (hands.length > 0) {
-    let poolSize = 200 * komorebiLight;
-    for (let r = poolSize; r > 0; r -= 20) {
-      // Soft golden light pool
-      fill(45, 50, 85, map(r, 0, poolSize, 45, 0) * komorebiLight);
-      ellipse(hands[0].x, hands[0].y, r * 2, r * 1.2);
-    }
-  }
-  
-  // Falling leaves
+  // Large, prominent leaves floating down
   for (let leaf of komorebiLeaves) {
-    leaf.y += leaf.fallSpeed;
-    leaf.x += sin(frameCount * 0.02 + leaf.rotation) * 0.5;
-    leaf.rotation += 0.01;
+    // Gentle floating motion
+    leaf.y += leaf.fallSpeed * 0.7;
+    leaf.x += sin(frameCount * 0.015 + leaf.rotation) * 1.2;
+    leaf.rotation += 0.008;
     
-    if (leaf.y > height + 50) {
-      leaf.y = -50;
+    if (leaf.y > height + 100) {
+      leaf.y = -100;
       leaf.x = random(width);
+      leaf.size = random(40, 90); // Bigger leaves
     }
     
     push();
     translate(leaf.x, leaf.y);
     rotate(leaf.rotation);
-    // Soft olive-green leaves
-    fill(95, 40, 35, 55);
-    ellipse(0, 0, leaf.size * 0.4, leaf.size);
+    
+    // Draw leaf shape (more detailed)
+    let lSize = leaf.size * 1.5; // Make leaves bigger
+    
+    // Leaf catches light when it passes through rays
+    let inLight = false;
+    for (let ray of komorebiRays) {
+      if (abs(leaf.x - ray.x) < ray.width * 0.5) {
+        inLight = true;
+        break;
+      }
+    }
+    
+    // Leaf body - darker when in shadow, golden when in light
+    if (inLight && komorebiLight > 0.3) {
+      // Backlit leaf - glowing edges
+      fill(50, 70, 60, 70);
+      ellipse(0, 0, lSize * 0.35, lSize);
+      // Glow
+      fill(45, 80, 80, 30 * komorebiLight);
+      ellipse(0, 0, lSize * 0.5, lSize * 1.2);
+    } else {
+      // Shadow leaf
+      fill(120, 45, 25, 65);
+      ellipse(0, 0, lSize * 0.35, lSize);
+    }
+    
+    // Leaf vein
+    stroke(100, 30, 20, 40);
+    strokeWeight(1);
+    line(0, -lSize * 0.4, 0, lSize * 0.4);
+    noStroke();
+    
     pop();
   }
   
-  // Canopy - deep forest green
-  fill(140, 50, 6);
-  for (let i = 0; i < 20; i++) {
-    ellipse(i * width/12 - 50, -20, 180, 140);
+  // Light pool where hand is (catching light)
+  if (hands.length > 0 && hands[0].open) {
+    let poolSize = 250 * komorebiLight;
+    for (let r = poolSize; r > 0; r -= 25) {
+      fill(48, 55, 90, map(r, 0, poolSize, 50, 0) * komorebiLight);
+      ellipse(hands[0].x, hands[0].y, r * 2, r * 1.3);
+    }
+    
+    // Floating light particles around hand
+    for (let i = 0; i < 8; i++) {
+      let angle = frameCount * 0.02 + i * PI / 4;
+      let dist = 60 + sin(frameCount * 0.05 + i) * 20;
+      let px = hands[0].x + cos(angle) * dist;
+      let py = hands[0].y + sin(angle) * dist * 0.6;
+      let pSize = 4 + sin(frameCount * 0.1 + i) * 2;
+      fill(50, 60, 95, 50 * komorebiLight);
+      ellipse(px, py, pSize);
+    }
+  }
+  
+  // Foreground canopy layer (darker, frames the scene)
+  fill(135, 60, 3);
+  for (let i = 0; i < 8; i++) {
+    let x = i * width/5 - 100;
+    ellipse(x, -50, 280, 200);
   }
   
   // Light message
@@ -561,10 +1100,29 @@ function drawKomorebi() {
 
 // === FERNWEH ===
 function drawFernweh() {
-  // Twilight sky gradient - deep violet to indigo
-  for (let y = 0; y < height * 0.6; y++) {
-    let inter = y / (height * 0.6);
-    stroke(lerpColor(color(270, 60, 8), color(250, 50, 20), inter));
+  let cx = width / 2;
+  let horizonY = height * 0.42;
+  
+  // Sky: deep twilight gradient - violet at top fading to warm amber glow at horizon
+  for (let y = 0; y < height; y++) {
+    let inter = y / height;
+    if (y < horizonY) {
+      // Upper sky: deep violet to dusky rose
+      let skyInter = y / horizonY;
+      stroke(lerpColor(
+        color(270, 55, 5),      // Deep night violet
+        color(280, 35, 18),     // Dusky rose
+        skyInter
+      ));
+    } else {
+      // Below horizon: earth tones
+      let groundInter = (y - horizonY) / (height - horizonY);
+      stroke(lerpColor(
+        color(260, 30, 10),
+        color(250, 25, 5),
+        groundInter
+      ));
+    }
     line(0, y, width, y);
   }
   noStroke();
@@ -575,11 +1133,10 @@ function drawFernweh() {
   
   if (hands.length > 0) {
     targetSpeed = map(hands[0].z, 0, 1, 0, 1, true);
-    // Also respond to hand position - higher = more longing
     let yBonus = map(hands[0].y, height, 0, 0, 0.3, true);
     targetSpeed = max(targetSpeed, yBonus);
     
-    // GESTURE: reaching toward camera (z depth > 0.3) OR hand in upper half
+    // GESTURE: reaching toward camera OR hand in upper half
     if (hands[0].z > 0.3 || hands[0].y < height * 0.5) {
       doingGesture = true;
     }
@@ -593,108 +1150,195 @@ function drawFernweh() {
       console.log("FERNWEH: Gesture started - reaching forward");
     }
   } else {
-    if (gestureActive) {
-      console.log("FERNWEH: Gesture stopped");
-    }
+    if (gestureActive) console.log("FERNWEH: Gesture stopped");
     gestureActive = false;
   }
   
   fernwehSpeed = lerp(fernwehSpeed, targetSpeed, 0.04);
   fernwehDistance += fernwehSpeed * 5;
   
-  // Stars
-  let cx = width / 2;
-  let cy = height * 0.4;
+  // Update audio
+  updateFernwehAudio(fernwehSpeed);
   
+  // === STARS: gently twinkling, not aggressive ===
   for (let star of fernwehStars) {
-    star.z -= fernwehSpeed * star.z * 0.05;
+    star.twinkle += 0.02;
+    let twinkleAlpha = (sin(star.twinkle) * 0.3 + 0.7);
     
+    // Slow drift when reaching
+    star.z -= fernwehSpeed * star.z * 0.02;
     if (star.z < 0.5) {
       star.z = 15;
       star.x = random(-width, width * 2);
-      star.y = random(-height, height * 2);
+      star.y = random(-height * 0.5, height * 0.4);
     }
     
     let px = cx + (star.x - cx) / star.z;
-    let py = cy + (star.y - cy) / star.z;
-    let pSize = star.size / star.z * (1 + fernwehSpeed * 3);
+    let py = (star.y) / star.z;
+    let pSize = star.size / star.z;
     
-    if (px < -20 || px > width + 20 || py < -20 || py > height * 0.7) continue;
+    if (px < -20 || px > width + 20 || py < -20 || py > horizonY + 20) continue;
     
-    // Motion trail
-    if (fernwehSpeed > 0.2) {
-      // Star trails - soft lavender
-      stroke(260, 25, star.brightness, 30 * fernwehSpeed);
-      strokeWeight(pSize * 0.5);
-      let trail = fernwehSpeed * 40 / star.z;
-      line(px, py, px - (px - cx) * 0.01 * trail, py - (py - cy) * 0.01 * trail);
-      noStroke();
-    }
-    
-    // Stars with soft lavender tint
-    fill(260, 25, star.brightness, map(star.z, 0.5, 15, 100, 20));
+    fill(270, 15, star.brightness * twinkleAlpha, map(star.z, 0.5, 15, 80, 15));
     ellipse(px, py, pSize);
   }
   
-  // Mountains
-  let horizonY = height * 0.5;
+  // === HORIZON GLOW: the unreachable "there" ===
+  // Warm amber glow at the vanishing point — this is what calls you
+  let glowIntensity = 0.25 + fernwehSpeed * 0.75;
+  let glowPulse = sin(frameCount * 0.008) * 0.1 + 1;
   
-  // Distant mountains - deep violet
-  fill(265, 40, 18);
+  // Outer glow - soft and wide
+  for (let r = 280 * glowIntensity; r > 0; r -= 8) {
+    let alpha = map(r, 0, 280 * glowIntensity, 40, 0) * glowIntensity;
+    fill(30, 60, 75, alpha * glowPulse);
+    ellipse(cx, horizonY, r * 4, r * 1.5);
+  }
+  
+  // Inner glow - brighter, the "promise" of the distant place
+  for (let r = 80 * glowIntensity; r > 0; r -= 6) {
+    let alpha = map(r, 0, 80 * glowIntensity, 55, 0) * glowIntensity;
+    fill(35, 50, 90, alpha * glowPulse);
+    ellipse(cx, horizonY - 5, r * 2.5, r);
+  }
+  
+  // === GHOSTLY SILHOUETTES: places you've never been ===
+  // They appear faintly in the distance — spires, domes, arches
+  for (let mem of fernwehMemories) {
+    let phase = sin(frameCount * mem.speed + mem.phase);
+    let memAlpha = (0.15 + fernwehSpeed * 0.3) * (phase * 0.3 + 0.7);
+    let memY = horizonY - mem.size * 0.3;
+    let drift = sin(frameCount * 0.003 + mem.phase) * 15;
+    
+    fill(30, 30, 60, memAlpha * 100);
+    noStroke();
+    
+    if (mem.type === 'spire') {
+      // Church spire / minaret
+      triangle(
+        mem.x + drift, memY - mem.size,
+        mem.x + drift - mem.size * 0.15, memY,
+        mem.x + drift + mem.size * 0.15, memY
+      );
+    } else if (mem.type === 'dome') {
+      // Mosque dome / cathedral
+      arc(mem.x + drift, memY, mem.size * 0.6, mem.size * 0.5, PI, TWO_PI);
+      rect(mem.x + drift - mem.size * 0.25, memY, mem.size * 0.5, mem.size * 0.2);
+    } else if (mem.type === 'tower') {
+      // Tower
+      rect(mem.x + drift - mem.size * 0.08, memY - mem.size * 0.8, mem.size * 0.16, mem.size * 0.8);
+    } else if (mem.type === 'arch') {
+      // Gateway arch
+      arc(mem.x + drift, memY, mem.size * 0.5, mem.size * 0.7, PI, TWO_PI);
+    } else {
+      // Distant tree
+      ellipse(mem.x + drift, memY - mem.size * 0.3, mem.size * 0.4, mem.size * 0.5);
+      rect(mem.x + drift - 2, memY - mem.size * 0.1, 4, mem.size * 0.3);
+    }
+  }
+  
+  // === MOUNTAIN LAYERS: depth and distance ===
+  // Far mountains - barely visible, violet
+  fill(270, 35, 14);
+  beginShape();
+  vertex(0, height);
+  for (let x = 0; x <= width; x += 25) {
+    vertex(x, horizonY + 20 - noise(x * 0.003 + 100) * 80);
+  }
+  vertex(width, height);
+  endShape(CLOSE);
+  
+  // Mid mountains
+  fill(265, 30, 10);
   beginShape();
   vertex(0, height);
   for (let x = 0; x <= width; x += 20) {
-    vertex(x, horizonY + 60 - noise(x * 0.004 + fernwehDistance * 0.0001) * 120);
+    vertex(x, horizonY + 50 - noise(x * 0.005 + 50) * 70);
   }
   vertex(width, height);
   endShape(CLOSE);
   
-  // Closer mountains - darker violet
-  fill(260, 35, 12);
+  // Near hills - darkest
+  fill(260, 25, 7);
   beginShape();
   vertex(0, height);
   for (let x = 0; x <= width; x += 15) {
-    vertex(x, horizonY + 30 - noise(x * 0.006 + 50 + fernwehDistance * 0.0002) * 90);
+    vertex(x, horizonY + 80 - noise(x * 0.008) * 50);
   }
   vertex(width, height);
   endShape(CLOSE);
   
-  // Road - deep charcoal with violet tint
-  fill(255, 20, 8);
+  // === MIST: the emotional haze of longing ===
+  for (let m of fernwehMist) {
+    m.x += m.speed;
+    if (m.x > width + m.w) m.x = -m.w;
+    
+    let mistAlpha = m.alpha * (0.5 + fernwehSpeed * 0.5);
+    for (let r = 3; r >= 0; r--) {
+      fill(270, 20, 30, mistAlpha / (r + 1));
+      ellipse(m.x, m.y, m.w + r * 40, m.h + r * 20);
+    }
+  }
+  
+  // === THE ROAD: solitary path to nowhere ===
+  // Wider at bottom, vanishing to a point — you're alone on this road
+  fill(255, 15, 6);
   beginShape();
-  vertex(width * 0.2, height);
-  vertex(cx - 2, horizonY);
-  vertex(cx + 2, horizonY);
-  vertex(width * 0.8, height);
+  vertex(width * 0.25, height);
+  vertex(cx - 1.5, horizonY + 15);
+  vertex(cx + 1.5, horizonY + 15);
+  vertex(width * 0.75, height);
   endShape(CLOSE);
   
-  // Road lines
-  for (let i = 0; i < 25; i++) {
-    let z = ((i * 30 + fernwehDistance * 15) % 400) / 400;
-    let y = lerp(horizonY, height, z);
-    let w = lerp(1, 10, z);
-    fill(45, 70, 60, map(z, 0, 1, 20, 70));
-    rect(cx - w/2, y, w, lerp(3, 30, z));
+  // Dashed center line — the road goes on
+  for (let i = 0; i < 30; i++) {
+    let z = ((i * 25 + fernwehDistance * 12) % 500) / 500;
+    let y = lerp(horizonY + 15, height, z * z); // quadratic for perspective
+    let w = lerp(0.5, 6, z);
+    let lineLen = lerp(2, 35, z);
+    let lineAlpha = map(z, 0, 1, 10, 55);
+    fill(40, 50, 55, lineAlpha);
+    rect(cx - w/2, y, w, lineLen);
   }
   
-  // Horizon glow
-  let glowInt = 0.3 + fernwehSpeed * 0.7;
-  for (let r = 150 * glowInt; r > 0; r -= 12) {
-    fill(40, 50, 80, (r / 150) * 30 * glowInt);
-    ellipse(cx, horizonY - 10, r * 3, r);
-  }
+  // === SOLITARY FIGURE silhouette (you, walking) ===
+  let figureY = height * 0.72;
+  let figureSize = 18;
+  let figureAlpha = 40 + fernwehSpeed * 30;
+  fill(260, 30, 5, figureAlpha);
+  // Head
+  ellipse(cx, figureY - figureSize * 1.5, figureSize * 0.5, figureSize * 0.5);
+  // Body
+  rect(cx - figureSize * 0.15, figureY - figureSize * 1.3, figureSize * 0.3, figureSize);
+  // Legs (walking)
+  let legSwing = sin(fernwehDistance * 0.3) * 3;
+  rect(cx - figureSize * 0.12 + legSwing, figureY - figureSize * 0.3, figureSize * 0.12, figureSize * 0.5);
+  rect(cx + figureSize * 0.02 - legSwing, figureY - figureSize * 0.3, figureSize * 0.12, figureSize * 0.5);
   
-  // Longing message
-  if (fernwehSpeed > 0.4) {
-    fill(0, 0, 100, (fernwehSpeed - 0.4) * 60);
-    textAlign(CENTER, CENTER);
-    textSize(16);
+  // === NARRATIVE TEXT ===
+  textAlign(CENTER, CENTER);
+  noStroke();
+  
+  // The ache — poetic text that fades in based on reaching
+  if (fernwehSpeed > 0.2) {
+    let textAlpha = map(fernwehSpeed, 0.2, 0.8, 0, 65, true);
+    fill(0, 0, 100, textAlpha);
+    textSize(18);
     textStyle(ITALIC);
-    text("the horizon calls...", width/2, height - 150);
+    
+    // Different messages at different intensities
+    if (fernwehSpeed > 0.6) {
+      text("you have never been there, but you miss it", cx, height * 0.25);
+    } else if (fernwehSpeed > 0.4) {
+      text("somewhere, a place is waiting for you", cx, height * 0.25);
+    } else {
+      text("the distance aches...", cx, height * 0.25);
+    }
     textStyle(NORMAL);
   }
   
-  drawVignette(0.45 - fernwehSpeed * 0.2);
+  // Heavy vignette — the world narrows when you long for somewhere else
+  drawVignette(0.55 - fernwehSpeed * 0.15);
 }
 
 // === REFLECTION PHASE ===
@@ -705,34 +1349,43 @@ function drawReflection() {
   background(chapter.color.h, chapter.color.s * 0.15, 5);
   drawTravelingParticles(0.4);
   
+  // Reflection audio - gentle resolution
+  updateReflectionAudio(currentChapter, elapsed);
+  
   textAlign(CENTER, CENTER);
   noStroke();
   
-  // "You felt"
+  // "You experienced"
   let labelAlpha = map(elapsed, 0, 600, 0, 50, true);
   fill(0, 0, 60, labelAlpha);
   textSize(16);
-  text("YOU EXPERIENCED", width/2, height * 0.3);
+  text("YOU EXPERIENCED", width/2, height * 0.28);
   
   // Word
   let wordAlpha = map(elapsed, 300, 900, 0, 100, true);
   fill(chapter.color.h, chapter.color.s * 0.5, 85, wordAlpha);
-  textSize(min(width * 0.12, 100));
-  text(chapter.word, width/2, height * 0.42);
+  textSize(min(width * 0.10, 85));
+  text(chapter.word, width/2, height * 0.38);
+  
+  // Native script
+  let nativeAlpha = map(elapsed, 400, 1000, 0, 65, true);
+  fill(chapter.color.h, chapter.color.s * 0.3, 75, nativeAlpha);
+  textSize(min(width * 0.05, 40));
+  text(chapter.native, width/2, height * 0.47);
   
   // Meaning
   let meaningAlpha = map(elapsed, 600, 1200, 0, 80, true);
   fill(0, 0, 90, meaningAlpha);
-  textSize(24);
+  textSize(22);
   textStyle(ITALIC);
-  text(`"${chapter.meaning}"`, width/2, height * 0.55);
+  text(`"${chapter.meaning}"`, width/2, height * 0.57);
   textStyle(NORMAL);
   
   // "Through speculative storytelling"
   let methodAlpha = map(elapsed, 900, 1500, 0, 50, true);
   fill(0, 0, 60, methodAlpha);
   textSize(14);
-  text("through embodied, speculative translation", width/2, height * 0.65);
+  text("through embodied, speculative translation", width/2, height * 0.67);
   
   // Continue prompt
   if (elapsed > 2000) {
@@ -764,42 +1417,118 @@ function drawTransition() {
   let fromChapter = CHAPTERS[currentChapter];
   let toChapter = CHAPTERS[currentChapter + 1];
   
-  // Blend backgrounds
-  let blend = map(elapsed, 0, 2000, 0, 1, true);
-  let h = lerp(fromChapter.color.h, toChapter.color.h, blend);
-  let s = lerp(fromChapter.color.s, toChapter.color.s, blend);
-  background(h, s * 0.15, 5);
+  // Story-driven transition narratives — SLOW, intentional pacing
+  const transitions = [
+    { // Hygge → Komorebi: From safety to wonder
+      lines: [
+        { text: "The fire dims.", time: 0, duration: 3500, size: 36 },
+        { text: "Something stirs within you.", time: 3000, duration: 3500, size: 32 },
+        { text: "A door opens.", time: 6000, duration: 3000, size: 38 },
+        { text: "Outside, the world is waiting.", time: 8500, duration: 3500, size: 30 },
+        { text: "You step into the light...", time: 11500, duration: 3500, size: 34 }
+      ],
+      totalTime: 15000
+    },
+    { // Komorebi → Fernweh: From wonder to longing
+      lines: [
+        { text: "The light fades.", time: 0, duration: 3500, size: 36 },
+        { text: "But its warmth lingers\nin your chest.", time: 3000, duration: 4000, size: 30 },
+        { text: "You look to the horizon.", time: 6500, duration: 3500, size: 34 },
+        { text: "There are places\nyou have never been.", time: 9500, duration: 4000, size: 32 },
+        { text: "They call to you now...", time: 13000, duration: 3500, size: 36 }
+      ],
+      totalTime: 16500
+    }
+  ];
   
-  // Traveling particles shift color
+  let trans = transitions[currentChapter] || transitions[0];
+  let progress = elapsed / trans.totalTime;
+  let easeProgress = progress * progress * (3 - 2 * progress);
+  
+  // Gradual background shift
+  let h = lerp(fromChapter.color.h, toChapter.color.h, easeProgress);
+  let s = lerp(fromChapter.color.s, toChapter.color.s, easeProgress);
+  let b = lerp(5, 4, sin(progress * PI)); // Slightly darker in middle
+  background(h, s * 0.1, b);
+  
+  // Particles fade and shift
   for (let p of travelingParticles) {
-    p.hue = lerp(fromChapter.color.h, toChapter.color.h, blend);
+    p.hue = lerp(fromChapter.color.h, toChapter.color.h, easeProgress);
   }
-  drawTravelingParticles(0.6);
+  let particleAlpha = 0.2 + sin(progress * PI) * 0.3;
+  drawTravelingParticles(particleAlpha);
   
+  // Cinematic letterbox
+  let barHeight = sin(progress * PI) * 70;
+  fill(0, 0, 0, 95);
+  noStroke();
+  rect(0, 0, width, barHeight);
+  rect(0, height - barHeight, width, barHeight);
+  
+  // Draw narrative lines
   textAlign(CENTER, CENTER);
   noStroke();
   
-  if (elapsed < 1500) {
-    // "The journey continues"
-    let alpha = sin(map(elapsed, 0, 1500, 0, PI)) * 70;
-    fill(0, 0, 100, alpha);
-    textSize(20);
-    text("The journey continues...", width/2, height/2);
-  } else {
-    // Preview next word
-    let alpha = map(elapsed, 1500, 2500, 0, 80, true);
-    fill(toChapter.color.h, toChapter.color.s * 0.4, 80, alpha);
-    textSize(60);
-    text(toChapter.word, width/2, height/2);
+  for (let line of trans.lines) {
+    let lineProgress = (elapsed - line.time) / line.duration;
+    if (lineProgress > 0 && lineProgress < 1) {
+      // Slow fade in, hold, slow fade out
+      let alpha;
+      if (lineProgress < 0.25) {
+        alpha = map(lineProgress, 0, 0.25, 0, 90); // Fade in
+      } else if (lineProgress > 0.75) {
+        alpha = map(lineProgress, 0.75, 1, 90, 0); // Fade out
+      } else {
+        alpha = 90; // Hold
+      }
+      
+      fill(0, 0, 100, alpha);
+      textSize(line.size || 32);
+      textStyle(ITALIC);
+      text(line.text, width/2, height/2);
+      textStyle(NORMAL);
+    }
   }
   
-  if (elapsed > 3000) {
+  // Final preview of next word (last 3 seconds) — slow reveal
+  if (elapsed > trans.totalTime - 3000) {
+    let revealProgress = map(elapsed, trans.totalTime - 3000, trans.totalTime, 0, 1, true);
+    // Ease in
+    let easeReveal = revealProgress * revealProgress;
+    let alpha = easeReveal * 80;
+    
+    // Native script first (subtle)
+    fill(toChapter.color.h, toChapter.color.s * 0.3, 70, alpha * 0.5);
+    textSize(36);
+    text(toChapter.native, width/2, height * 0.40);
+    
+    // Then romanized — large
+    fill(toChapter.color.h, toChapter.color.s * 0.5, 85, alpha);
+    textSize(min(width * 0.12, 90));
+    text(toChapter.word, width/2, height * 0.54);
+    
+    // Meaning underneath
+    if (revealProgress > 0.4) {
+      let meaningAlpha = map(revealProgress, 0.4, 1, 0, 60, true);
+      fill(0, 0, 80, meaningAlpha);
+      textSize(22);
+      textStyle(ITALIC);
+      text(`"${toChapter.meaning}"`, width/2, height * 0.66);
+      textStyle(NORMAL);
+    }
+  }
+  
+  // Update transition audio
+  updateTransitionAudio(currentChapter, progress);
+  
+  // Complete transition
+  if (elapsed > trans.totalTime) {
     currentChapter++;
     phase = 'title';
     phaseTimer = millis();
-    // Reset for next chapter
     chapterProgress = 0;
     chapterComplete = false;
+    setChapterAudio(currentChapter);
     gestureActive = false;
     gestureStartTime = 0;
   }
@@ -813,6 +1542,9 @@ function drawComplete() {
   background(260, 35, 6);
   drawTravelingParticles(0.3);
   
+  // Completion audio - gentle resolution of the journey
+  updateCompleteAudio(elapsed);
+  
   textAlign(CENTER, CENTER);
   noStroke();
   
@@ -822,18 +1554,22 @@ function drawComplete() {
   textSize(28);
   text("JOURNEY COMPLETE", width/2, height * 0.25);
   
-  // Three words summary
+  // Three words with native script
   let wordsAlpha = map(elapsed, 500, 1500, 0, 80, true);
-  fill(0, 0, 80, wordsAlpha);
-  textSize(18);
-  text("HYGGE  →  KOMOREBI  →  FERNWEH", width/2, height * 0.35);
+  fill(0, 0, 75, wordsAlpha);
+  textSize(16);
+  text("hygge  ·  木漏れ日  ·  Fernweh", width/2, height * 0.34);
+  
+  fill(0, 0, 90, wordsAlpha);
+  textSize(20);
+  text("HYGGE  →  KOMOREBI  →  FERNWEH", width/2, height * 0.40);
   
   // Home to Horizon
   let subAlpha = map(elapsed, 800, 1800, 0, 60, true);
   fill(0, 0, 60, subAlpha);
   textSize(16);
   textStyle(ITALIC);
-  text("from home to horizon", width/2, height * 0.42);
+  text("from home to horizon", width/2, height * 0.48);
   textStyle(NORMAL);
   
   // Question
@@ -929,10 +1665,18 @@ function drawChapterIndicator() {
 function drawInstruction() {
   let chapter = CHAPTERS[currentChapter];
   
-  fill(0, 0, 100, 50);
+  // Bigger, clearer instruction
+  fill(0, 0, 100, 70);
   textAlign(CENTER, BOTTOM);
-  textSize(14);
-  text(chapter.instruction, width/2, height - 60);
+  textSize(22);
+  text(chapter.instruction, width/2, height - 80);
+  
+  // Subtle hint below
+  if (!gestureActive) {
+    fill(0, 0, 100, 35);
+    textSize(14);
+    text("use your hand to interact", width/2, height - 50);
+  }
 }
 
 function drawCompletionPrompt(progress) {
